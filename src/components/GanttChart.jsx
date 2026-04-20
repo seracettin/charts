@@ -1,6 +1,7 @@
 function clampSpan (columns, startCol, endCol) {
-  const startIdx = Math.max(0, columns.indexOf(startCol))
+  let startIdx = columns.indexOf(startCol)
   let endIdx = columns.indexOf(endCol)
+  if (startIdx < 0) startIdx = 0
   if (endIdx < 0) endIdx = columns.length - 1
   if (endIdx < startIdx) endIdx = startIdx
   return { startIdx, endIdx, span: endIdx - startIdx + 1 }
@@ -9,17 +10,19 @@ function clampSpan (columns, startCol, endCol) {
 export default function GanttChart ({ columns, rows, onEditRow }) {
   if (!columns.length) {
     return (
-      <div className="gantt empty">
-        <p>No columns yet. Click <strong>Edit columns</strong> to add a timeline.</p>
+      <div className="gantt-wrap">
+        <div className="gantt empty">
+          <p>No columns yet. Click <strong>Edit columns</strong> to add a timeline.</p>
+        </div>
       </div>
     )
   }
 
-  const templateColumns = `minmax(220px, 260px) repeat(${columns.length}, minmax(110px, 1fr))`
+  const templateColumns = `minmax(220px, 260px) repeat(${columns.length}, minmax(96px, 1fr))`
 
   return (
     <div className="gantt-wrap">
-      <div className="gantt" style={{ '--cols': columns.length }}>
+      <div className="gantt">
         <div className="gantt-grid" style={{ gridTemplateColumns: templateColumns }}>
           <div className="gantt-head gantt-corner">Row / Column</div>
           {columns.map((c, i) => (
@@ -32,28 +35,25 @@ export default function GanttChart ({ columns, rows, onEditRow }) {
             </div>
           )}
 
-          {rows.map((row, rIdx) => {
-            const { startIdx, span } = clampSpan(columns, row.startCol, row.endCol)
-            return (
-              <RowLine
-                key={row.id}
-                row={row}
-                rIdx={rIdx}
-                columns={columns}
-                startIdx={startIdx}
-                span={span}
-                onEditRow={onEditRow}
-              />
-            )
-          })}
+          {rows.map((row, rIdx) => (
+            <RowLine
+              key={row.id}
+              row={row}
+              rIdx={rIdx}
+              columns={columns}
+              onEditRow={onEditRow}
+            />
+          ))}
         </div>
       </div>
     </div>
   )
 }
 
-function RowLine ({ row, rIdx, columns, startIdx, span, onEditRow }) {
+function RowLine ({ row, rIdx, columns, onEditRow }) {
   const zebra = rIdx % 2 === 0 ? 'row-even' : 'row-odd'
+  const firstColor = row.segments[0]?.color ?? '#AEA79F'
+
   return (
     <>
       <button
@@ -61,7 +61,7 @@ function RowLine ({ row, rIdx, columns, startIdx, span, onEditRow }) {
         onClick={() => onEditRow(row)}
         title="Edit row"
       >
-        <span className="rowhead-dot" style={{ background: row.color }} />
+        <span className="rowhead-dot" style={{ background: firstColor }} />
         <span className="rowhead-name">{row.name}</span>
         {row.note && <span className="rowhead-note">{row.note}</span>}
       </button>
@@ -70,20 +70,26 @@ function RowLine ({ row, rIdx, columns, startIdx, span, onEditRow }) {
         <div key={c + i} className={`gantt-cell ${zebra}`} />
       ))}
 
-      <div
-        className="gantt-bar"
-        style={{
-          gridColumn: `${startIdx + 2} / span ${span}`,
-          gridRow: rIdx + 2,
-          background: row.color
-        }}
-        onClick={() => onEditRow(row)}
-        title={`${row.name} — ${row.startCol} → ${row.endCol}`}
-      >
-        <span className="gantt-bar-label">
-          {row.startCol} → {row.endCol}
-        </span>
-      </div>
+      {row.segments.map((seg, sIdx) => {
+        const { startIdx, span } = clampSpan(columns, seg.startCol, seg.endCol)
+        return (
+          <div
+            key={seg.id ?? sIdx}
+            className="gantt-bar"
+            style={{
+              gridColumn: `${startIdx + 2} / span ${span}`,
+              gridRow: rIdx + 2,
+              background: seg.color
+            }}
+            onClick={() => onEditRow(row)}
+            title={`${row.name} — ${seg.label || 'Phase'}: ${seg.startCol} → ${seg.endCol}`}
+          >
+            <span className="gantt-bar-label">
+              {seg.label || `${seg.startCol} → ${seg.endCol}`}
+            </span>
+          </div>
+        )
+      })}
     </>
   )
 }
