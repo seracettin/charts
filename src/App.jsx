@@ -96,7 +96,7 @@ const STATUS_SAVED = 'saved'
 export default function App () {
   const [state, setState] = useState(loadState)
   const [saveStatus, setSaveStatus] = useState(STATUS_FRESH)
-  const [rowModal, setRowModal] = useState({ open: false, row: null })
+  const [rowModal, setRowModal] = useState({ open: false, row: null, focusSegmentId: null })
   const [colModalOpen, setColModalOpen] = useState(false)
 
   useEffect(() => {
@@ -112,9 +112,9 @@ export default function App () {
     return () => clearTimeout(t)
   }, [state])
 
-  const openAddRow = () => setRowModal({ open: true, row: null })
-  const openEditRow = (row) => setRowModal({ open: true, row })
-  const closeRowModal = () => setRowModal({ open: false, row: null })
+  const openAddRow = () => setRowModal({ open: true, row: null, focusSegmentId: null })
+  const openEditRow = (row, focusSegmentId = null) => setRowModal({ open: true, row, focusSegmentId })
+  const closeRowModal = () => setRowModal({ open: false, row: null, focusSegmentId: null })
 
   const saveRow = (row) => {
     setState(prev => {
@@ -239,6 +239,7 @@ export default function App () {
       {rowModal.open && (
         <RowModal
           row={rowModal.row}
+          focusSegmentId={rowModal.focusSegmentId}
           columns={state.columns}
           onSave={saveRow}
           onDelete={deleteRow}

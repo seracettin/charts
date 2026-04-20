@@ -123,7 +123,7 @@ function RowLine ({ row, rIdx, columns, onEditRow }) {
             height: BAR_H,
             marginTop: ROW_PAD + lane * (BAR_H + LANE_GAP)
           }}
-          onClick={() => onEditRow(row)}
+          onClick={(e) => { e.stopPropagation(); onEditRow(row, seg.id) }}
           title={`${row.name} — ${seg.label || 'Phase'}: ${seg.startCol} → ${seg.endCol}`}
         >
           <span className="gantt-bar-label">

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Modal from './Modal.jsx'
 import { PALETTE } from '../constants.js'
 
@@ -23,7 +23,7 @@ function emptySegment (columns, color = PALETTE.orange) {
   }
 }
 
-export default function RowModal ({ row, columns, onSave, onDelete, onClose }) {
+export default function RowModal ({ row, focusSegmentId, columns, onSave, onDelete, onClose }) {
   const isEdit = !!row
   const [form, setForm] = useState(() => ({
     id: row?.id ?? newId('r'),
@@ -33,7 +33,15 @@ export default function RowModal ({ row, columns, onSave, onDelete, onClose }) {
       ? row.segments.map(s => ({ ...s, id: s.id ?? newId('s') }))
       : [emptySegment(columns)]
   }))
+  // When a specific segment was clicked, start in single-segment focus mode.
+  const [focusedId, setFocusedId] = useState(focusSegmentId ?? null)
   const [error, setError] = useState('')
+
+  const focusIndex = useMemo(
+    () => (focusedId ? form.segments.findIndex(s => s.id === focusedId) : -1),
+    [focusedId, form.segments]
+  )
+  const isFocusMode = focusedId != null && focusIndex >= 0
 
   const update = (patch) => setForm(f => ({ ...f, ...patch }))
   const updateSeg = (i, patch) =>
@@ -41,7 +49,16 @@ export default function RowModal ({ row, columns, onSave, onDelete, onClose }) {
   const addSeg = () =>
     setForm(f => ({ ...f, segments: [...f.segments, emptySegment(columns, pickNextColor(f.segments))] }))
   const removeSeg = (i) =>
-    setForm(f => ({ ...f, segments: f.segments.filter((_, idx) => idx !== i) }))
+    setForm(f => {
+      const seg = f.segments[i]
+      const segments = f.segments.filter((_, idx) => idx !== i)
+      if (focusedId === seg.id) setFocusedId(null)
+      return { ...f, segments }
+    })
+  const removeFocusedSegment = () => {
+    if (focusIndex < 0) return
+    removeSeg(focusIndex)
+  }
 
   const submit = (e) => {
     e.preventDefault()
@@ -62,18 +79,31 @@ export default function RowModal ({ row, columns, onSave, onDelete, onClose }) {
     })
   }
 
+  const focusedSeg = isFocusMode ? form.segments[focusIndex] : null
+
+  const title = isFocusMode
+    ? `Edit segment${focusedSeg?.label ? ` — ${focusedSeg.label}` : ''}`
+    : isEdit ? 'Edit row' : 'Add a new row'
+  const subtitle = isFocusMode
+    ? `On row “${form.name || 'Untitled'}”. Changes save to this one segment only.`
+    : 'A row can carry multiple phase segments — e.g. Standard support, Pro, Legacy.'
+
   return (
     <Modal
-      title={isEdit ? 'Edit row' : 'Add a new row'}
-      subtitle="A row can carry multiple phase segments — e.g. Standard support, Pro, Legacy."
+      title={title}
+      subtitle={subtitle}
       onClose={onClose}
       footer={
         <div className="modal-actions">
-          {isEdit && (
+          {isFocusMode ? (
+            <button type="button" className="btn btn-danger" onClick={removeFocusedSegment}>
+              Delete segment
+            </button>
+          ) : isEdit ? (
             <button type="button" className="btn btn-danger" onClick={() => onDelete(form.id)}>
               Delete row
             </button>
-          )}
+          ) : null}
           <div className="spacer" />
           <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button type="submit" form="row-form" className="btn btn-primary">
@@ -87,7 +117,7 @@ export default function RowModal ({ row, columns, onSave, onDelete, onClose }) {
           <span className="field-label">Row label</span>
           <input
             className="input"
-            autoFocus
+            autoFocus={!isFocusMode}
             value={form.name}
             onChange={e => update({ name: e.target.value })}
             placeholder="e.g. Ubuntu 24.04 LTS, Design Sprint, Backend API…"
@@ -106,85 +136,114 @@ export default function RowModal ({ row, columns, onSave, onDelete, onClose }) {
 
         <div className="field">
           <div className="field-header">
-            <span className="field-label">Phase segments</span>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={addSeg}>+ Add segment</button>
+            <span className="field-label">
+              {isFocusMode ? 'This segment' : 'Phase segments'}
+            </span>
+            {isFocusMode ? (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFocusedId(null)}>
+                Manage all {form.segments.length} segment{form.segments.length === 1 ? '' : 's'}
+              </button>
+            ) : (
+              <button type="button" className="btn btn-secondary btn-sm" onClick={addSeg}>
+                + Add segment
+              </button>
+            )}
           </div>
 
           <div className="seg-list">
-            {form.segments.map((s, i) => (
-              <div key={s.id} className="seg-card" style={{ borderLeftColor: s.color }}>
-                <div className="seg-row">
-                  <label className="field flex-1">
-                    <span className="field-label">Label</span>
-                    <input
-                      className="input"
-                      value={s.label}
-                      onChange={e => updateSeg(i, { label: e.target.value })}
-                      placeholder="e.g. Standard support, Ubuntu Pro, Legacy add-on"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="icon-btn danger"
-                    onClick={() => removeSeg(i)}
-                    aria-label="Remove segment"
-                    disabled={form.segments.length === 1}
-                    title={form.segments.length === 1 ? 'At least one segment is required' : 'Remove segment'}
-                  >×</button>
-                </div>
-                <div className="seg-row">
-                  <label className="field flex-1">
-                    <span className="field-label">Start column</span>
-                    <select
-                      className="input"
-                      value={s.startCol}
-                      onChange={e => updateSeg(i, { startCol: e.target.value })}
-                    >
-                      {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </label>
-                  <label className="field flex-1">
-                    <span className="field-label">End column</span>
-                    <select
-                      className="input"
-                      value={s.endCol}
-                      onChange={e => updateSeg(i, { endCol: e.target.value })}
-                    >
-                      {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </label>
-                </div>
-                <div className="field">
-                  <span className="field-label">Color</span>
-                  <div className="swatches">
-                    {SWATCHES.map(c => (
-                      <button
-                        key={c}
-                        type="button"
-                        className={`swatch ${s.color === c ? 'is-active' : ''}`}
-                        style={{ background: c }}
-                        onClick={() => updateSeg(i, { color: c })}
-                        aria-label={`Pick color ${c}`}
-                      />
-                    ))}
-                    <label className="swatch-custom">
-                      <input
-                        type="color"
-                        value={s.color}
-                        onChange={e => updateSeg(i, { color: e.target.value })}
-                      />
-                      <span>Custom</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            ))}
+            {(isFocusMode ? [focusedSeg] : form.segments).map((s) => {
+              const i = form.segments.indexOf(s)
+              return (
+                <SegmentCard
+                  key={s.id}
+                  seg={s}
+                  columns={columns}
+                  canRemove={!isFocusMode && form.segments.length > 1}
+                  showRemove={!isFocusMode}
+                  onChange={patch => updateSeg(i, patch)}
+                  onRemove={() => removeSeg(i)}
+                />
+              )
+            })}
           </div>
         </div>
 
         {error && <p className="form-error">{error}</p>}
       </form>
     </Modal>
+  )
+}
+
+function SegmentCard ({ seg, columns, canRemove, showRemove, onChange, onRemove }) {
+  return (
+    <div className="seg-card" style={{ borderLeftColor: seg.color }}>
+      <div className="seg-row">
+        <label className="field flex-1">
+          <span className="field-label">Label</span>
+          <input
+            className="input"
+            value={seg.label}
+            onChange={e => onChange({ label: e.target.value })}
+            placeholder="e.g. Standard support, Ubuntu Pro, Legacy add-on"
+          />
+        </label>
+        {showRemove && (
+          <button
+            type="button"
+            className="icon-btn danger"
+            onClick={onRemove}
+            aria-label="Remove segment"
+            disabled={!canRemove}
+            title={canRemove ? 'Remove segment' : 'At least one segment is required'}
+          >×</button>
+        )}
+      </div>
+      <div className="seg-row">
+        <label className="field flex-1">
+          <span className="field-label">Start column</span>
+          <select
+            className="input"
+            value={seg.startCol}
+            onChange={e => onChange({ startCol: e.target.value })}
+          >
+            {columns.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+        <label className="field flex-1">
+          <span className="field-label">End column</span>
+          <select
+            className="input"
+            value={seg.endCol}
+            onChange={e => onChange({ endCol: e.target.value })}
+          >
+            {columns.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="field">
+        <span className="field-label">Color</span>
+        <div className="swatches">
+          {SWATCHES.map(c => (
+            <button
+              key={c}
+              type="button"
+              className={`swatch ${seg.color === c ? 'is-active' : ''}`}
+              style={{ background: c }}
+              onClick={() => onChange({ color: c })}
+              aria-label={`Pick color ${c}`}
+            />
+          ))}
+          <label className="swatch-custom">
+            <input
+              type="color"
+              value={seg.color}
+              onChange={e => onChange({ color: e.target.value })}
+            />
+            <span>Custom</span>
+          </label>
+        </div>
+      </div>
+    </div>
   )
 }
 
